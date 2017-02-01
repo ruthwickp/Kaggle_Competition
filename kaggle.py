@@ -2,6 +2,11 @@ import random
 import numpy as np
 from sklearn import svm
 import pickle
+import tensorflow as tf 
+import keras
+from keras.models import Sequential
+from keras.layers.core import Dense, Activation, Flatten, Dropout
+from keras.utils.np_utils import to_categorical
 
 
 def kaggle_classify():
@@ -32,12 +37,10 @@ def kaggle_classify():
     filter_train_y = train_y
     print 'Finished filtering...'
 
-    # clf = svm.SVC(C=10**10, gamma=10**-20)
-    # clf = svm.SVC(kernel='sigmoid', C=10**20, gamma=10**-16)
-    clf = svm.SVC(C=float('inf'), gamma=10**-17, max_iter=10**7)
-    # clf = svm.SVC(C=10**20, gamma=10**-15)
-    # clf = svm.SVC(C=float('inf'), gamma=10**-15)
-    clf.fit(filter_train_x[::50], filter_train_y[::50])
+    # Create neural network
+    model = create_neural_network(filter_train_x[::10], filter_train_y[::10])
+    # model = create_neural_network(filter_train_x[::100], filter_train_y[::100])
+
     print 'Finished classfying...'
 
     # Compute error
@@ -45,19 +48,60 @@ def kaggle_classify():
     avg = []
     for i in range(len(filter_train_x) / valid_step):
         start, stop = valid_step * i, valid_step * (i + 1)
-        err = compute_error_clf(clf, filter_train_x[start:stop], filter_train_y[start:stop])
-        print 'Validation error from (%d, %d): %g' % (start, stop, err)
-        avg.append(err)
 
-    avg_err = float(sum(avg)) / len(avg)
-    print 'Average err: ', avg_err
+        ## Printing the accuracy of our model, according to the loss function specified in model.compile above
+        filter_train_y_hot = to_categorical(filter_train_y[start:stop], 3)
+        score = model.evaluate(filter_train_x[start:stop], filter_train_y_hot, verbose=0)
+        print('Test score:', score[0])
+        print('Test accuracy:', score[1])
+
+        print 'Validation accuracy from (%d, %d): %g' % (start, stop, score[1])
+        avg.append(score[1])
+
+    avg_accuracy = float(sum(avg)) / len(avg)
+    print 'Average accuracy: ', avg_accuracy
 
     test_x = process_test_data('test_2008.csv')
     filter_test_x = extract_feature(feature_set, test_x)
     print len(filter_test_x)
-    pred = clf.predict(filter_test_x)
+    pred_hot = model.predict(filter_test_x, batch_size=32)
+    print pred_hot
+    pred = [x.tolist().index(1) for x in pred_hot]
     print pred
     gen_file(pred)
+
+
+def create_neural_network(X_train, y_train):
+    print y_train
+    y_train_hot = to_categorical(y_train, 3)
+    print y_train_hot
+
+    ## Create your own model here given the constraints in the problem
+    model = Sequential()
+    model.add(Dense(1000, input_dim=len(X_train[0])))  # Use np.reshape instead of this in hw
+    model.add(Activation('linear'))
+
+    model.add(Dense(50))
+    model.add(Activation('relu'))
+
+    ## Once you one-hot encode the data labels, the line below should be predicting probabilities of each of the 10 classes
+    ## e.g. it should read: model.add(Dense(10)), not model.add(Dense(1))
+    model.add(Dense(3))
+    model.add(Activation('softmax'))
+
+    ## Printing a summary of the layers and weights in your model
+    model.summary()
+
+    ## In the line below we have specified the loss function as 'mse' (Mean Squared Error) because in the above code we did not one-hot encode the labels.
+    ## In your implementation, since you are one-hot encoding the labels, you should use 'categorical_crossentropy' as your loss.
+    ## You will likely have the best results with RMS prop or Adam as your optimizer.  In the line below we use Adadelta
+    model.compile(loss='categorical_crossentropy',optimizer='adam', metrics=['accuracy'])
+
+    fit = model.fit(X_train, y_train_hot, batch_size=32, nb_epoch=10,
+        verbose=1)
+
+    return model
+
 
 
 def compute_error_clf(clf, x, y):
@@ -73,6 +117,8 @@ def get_feature_set():
 
     feature_lst = ['HETENURE', 'HEHOUSUT', 'HETELHHD','HEPHONEO','HUFAMINC','HWHHWGT','HRNUMHOU','HRHTYPE','HRMIS','HUINTTYP','HUPRSCNT','HUBUS','GEREG','GESTCEN','GESTFIPS','GTCBSAST','GTCBSASZ','PERRP', 'PEMARITL','PEAGE','PESEX','PEAFEVER','PEEDUCA','PTDTRACE','PRDTHSP','PEHSPNON','PENATVTY','PRCITSHP','PURETOT','PUDIS','PEHRUSL1','PRCIVLF','PREMPHRS','PEIO1COW','PUIO1MFG','PRDTIND1','PRMJOCGR','PRSJMJ','PRCHLD',]
     feature_set = [ids.index(x) for x in feature_lst]
+
+    # feature_set = range(len(s.split(',')))[1:-1]
     return feature_set
 
 
