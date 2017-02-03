@@ -1,6 +1,7 @@
 import random
 import numpy as np
 from sklearn import svm
+from sklearn.model_selection import KFold
 import pickle
 import tensorflow as tf 
 import keras
@@ -10,6 +11,120 @@ from keras.utils.np_utils import to_categorical
 
 
 def kaggle_classify():
+    train_x, train_y = load_data()
+
+    # Get the feature set 
+    feature_set = get_feature_set()
+
+    print 'Feature set: ', feature_set
+    filter_train_x = extract_feature(feature_set, train_x)
+    filter_train_y = train_y
+    print 'Finished filtering...'
+
+    # # Create neural network
+    # model = create_neural_network(filter_train_x[::10], filter_train_y[::10])
+    # # model = create_neural_network(filter_train_x[::100], filter_train_y[::100])
+
+    # Create SVM
+    c_val = 10**3
+    g = 10**-2
+    clf = svm.SVC(C=c_val, gamma=g)
+    # clf = svm.SVC(C=float('inf'))
+
+
+    # clf.fit(filter_train_x[:10000], filter_train_y[:10000])
+    run_cross_validation(c_val, g, filter_train_x[::5], filter_train_y[::5])
+
+    print 'Finished classfying...'
+
+
+    clf.fit(filter_train_x[::5], filter_train_y[::5])
+    
+    # Total Training Error
+    print 'Total Training error: ', compute_error_clf(clf, filter_train_x, filter_train_y)
+
+
+
+    # # Compute error
+    # valid_step = 1000
+    # avg = []
+    # for i in range(len(filter_train_x) / valid_step):
+    #     start, stop = valid_step * i, valid_step * (i + 1)
+
+    #     # ## Printing the accuracy of our model, according to the loss function specified in model.compile above
+    #     # filter_train_y_hot = to_categorical(filter_train_y[start:stop], 3)
+    #     # score = model.evaluate(filter_train_x[start:stop], filter_train_y_hot, verbose=0)
+    #     # print('Test score:', score[0])
+    #     # print('Test accuracy:', score[1])
+
+    #     # print 'Validation accuracy from (%d, %d): %g' % (start, stop, score[1])
+    #     # avg.append(score[1])
+
+
+    #     # SVM accuracy
+    #     err = compute_error_clf(clf, filter_train_x[start:stop], filter_train_y[start:stop])
+    #     print 'Validation error from (%d, %d): %g' % (start, stop, err)
+    #     avg.append(err)
+
+    # avg_err = float(sum(avg)) / len(avg)
+    # print 'Average error: ', avg_err
+
+    # NN accuracy
+    # avg_accuracy = float(sum(avg)) / len(avg)
+    # print 'Average accuracy: ', avg_accuracy
+
+    test_x = process_test_data('test_2008.csv')
+    filter_test_x = extract_feature(feature_set, test_x)
+    print len(filter_test_x)
+
+    # NN prediction
+    # pred_hot = model.predict(filter_test_x, batch_size=32)
+    # print pred_hot
+    # pred = [x.tolist().index(1) for x in pred_hot]
+    # print pred
+
+    # SVM prediction
+    pred = clf.predict(filter_test_x)
+    print pred
+    print 'Fraction of 1s: ', sum([1 if x == 1 else 0 for x in pred]) / float(len(pred))
+    gen_file(pred)
+
+
+
+def run_cross_validation(c_val, g, master_train_x, master_train_y):
+    # Store training and validation error for each N
+    kf = KFold(n_splits=10)
+    total_train_err = 0
+    total_valid_err = 0
+    for train_index, test_index in kf.split(master_train_x):
+        print 'Fold train index: ', train_index, len(train_index)
+        print 'Fold test index: ', test_index, len(test_index)
+        # Split validation data
+        x_train, x_test = master_train_x[train_index], master_train_x[test_index]
+        y_train, y_test = master_train_y[train_index], master_train_y[test_index]
+
+        clf = svm.SVC(C=c_val, gamma=g)
+        clf.fit(x_train, y_train)
+
+        err_train = compute_error_clf(clf, x_train, y_train)
+        total_train_err += err_train
+        print 'Training error per fold: ', err_train
+
+        # Add testing error
+        err_test = compute_error_clf(clf, x_test, y_test)
+        total_valid_err += err_test
+        print 'Valid error per fold: ', err_test
+
+    # Store averages of 5 folds
+    avg_train_err = total_train_err / float(kf.get_n_splits(master_train_x))
+    avg_valid_err = total_valid_err / float(kf.get_n_splits(master_train_x))
+    print 'Average training error per point: ', avg_train_err
+    print 'Average validation error per point: ', avg_valid_err
+
+
+
+
+def load_data():
     # train_x, train_y = process_train_data('train_2008.csv')
 
     # # Dump training and testing onto a file
@@ -28,48 +143,7 @@ def kaggle_classify():
     train_y = pickle.load(train_y_pickle)
     train_y_pickle.close()
     print 'Finished loading data....'
-
-    # Get the feature set 
-    feature_set = get_feature_set()
-
-    print 'Feature set: ', feature_set
-    filter_train_x = extract_feature(feature_set, train_x)
-    filter_train_y = train_y
-    print 'Finished filtering...'
-
-    # Create neural network
-    model = create_neural_network(filter_train_x[::10], filter_train_y[::10])
-    # model = create_neural_network(filter_train_x[::100], filter_train_y[::100])
-
-    print 'Finished classfying...'
-
-    # Compute error
-    valid_step = 1000
-    avg = []
-    for i in range(len(filter_train_x) / valid_step):
-        start, stop = valid_step * i, valid_step * (i + 1)
-
-        ## Printing the accuracy of our model, according to the loss function specified in model.compile above
-        filter_train_y_hot = to_categorical(filter_train_y[start:stop], 3)
-        score = model.evaluate(filter_train_x[start:stop], filter_train_y_hot, verbose=0)
-        print('Test score:', score[0])
-        print('Test accuracy:', score[1])
-
-        print 'Validation accuracy from (%d, %d): %g' % (start, stop, score[1])
-        avg.append(score[1])
-
-    avg_accuracy = float(sum(avg)) / len(avg)
-    print 'Average accuracy: ', avg_accuracy
-
-    test_x = process_test_data('test_2008.csv')
-    filter_test_x = extract_feature(feature_set, test_x)
-    print len(filter_test_x)
-    pred_hot = model.predict(filter_test_x, batch_size=32)
-    print pred_hot
-    pred = [x.tolist().index(1) for x in pred_hot]
-    print pred
-    gen_file(pred)
-
+    return train_x, train_y
 
 def create_neural_network(X_train, y_train):
     print y_train
@@ -107,7 +181,7 @@ def create_neural_network(X_train, y_train):
 def compute_error_clf(clf, x, y):
     # Returns fraction of misclassified points
     pred = clf.predict(x)
-    res = [1 if pred[i] == y[i] else 0 for i in range(len(pred))]
+    res = [1 if pred[i] != y[i] else 0 for i in range(len(pred))]
     return float(sum(res)) / len(res)
 
 
