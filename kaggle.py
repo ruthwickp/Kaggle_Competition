@@ -3,11 +3,8 @@ import numpy as np
 from sklearn import svm
 from sklearn.model_selection import KFold
 import pickle
-import tensorflow as tf 
-import keras
-from keras.models import Sequential
-from keras.layers.core import Dense, Activation, Flatten, Dropout
-from keras.utils.np_utils import to_categorical
+
+from sklearn.ensemble import GradientBoostingClassifier
 
 
 def kaggle_classify():
@@ -21,69 +18,22 @@ def kaggle_classify():
     filter_train_y = train_y
     print 'Finished filtering...'
 
-    # # Create neural network
-    # model = create_neural_network(filter_train_x[::10], filter_train_y[::10])
-    # # model = create_neural_network(filter_train_x[::100], filter_train_y[::100])
-
-    # Create SVM
-    c_val = 10**3
-    g = 10**-2
-    clf = svm.SVC(C=c_val, gamma=g)
-    # clf = svm.SVC(C=float('inf'))
-
-
-    # clf.fit(filter_train_x[:10000], filter_train_y[:10000])
-    run_cross_validation(c_val, g, filter_train_x[::5], filter_train_y[::5])
+    # Hot classifier that gives good results
+    clf = GradientBoostingClassifier(n_estimators=500, learning_rate=1, 
+        max_depth=2, random_state=0).fit(filter_train_x[::2], filter_train_y[::2])
 
     print 'Finished classfying...'
 
-
-    clf.fit(filter_train_x[::5], filter_train_y[::5])
-    
     # Total Training Error
-    print 'Total Training error: ', compute_error_clf(clf, filter_train_x, filter_train_y)
+    print 'Total Training accuracy: ', clf.score(filter_train_x, filter_train_y)
 
 
-
-    # # Compute error
-    # valid_step = 1000
-    # avg = []
-    # for i in range(len(filter_train_x) / valid_step):
-    #     start, stop = valid_step * i, valid_step * (i + 1)
-
-    #     # ## Printing the accuracy of our model, according to the loss function specified in model.compile above
-    #     # filter_train_y_hot = to_categorical(filter_train_y[start:stop], 3)
-    #     # score = model.evaluate(filter_train_x[start:stop], filter_train_y_hot, verbose=0)
-    #     # print('Test score:', score[0])
-    #     # print('Test accuracy:', score[1])
-
-    #     # print 'Validation accuracy from (%d, %d): %g' % (start, stop, score[1])
-    #     # avg.append(score[1])
-
-
-    #     # SVM accuracy
-    #     err = compute_error_clf(clf, filter_train_x[start:stop], filter_train_y[start:stop])
-    #     print 'Validation error from (%d, %d): %g' % (start, stop, err)
-    #     avg.append(err)
-
-    # avg_err = float(sum(avg)) / len(avg)
-    # print 'Average error: ', avg_err
-
-    # NN accuracy
-    # avg_accuracy = float(sum(avg)) / len(avg)
-    # print 'Average accuracy: ', avg_accuracy
 
     test_x = process_test_data('test_2008.csv')
     filter_test_x = extract_feature(feature_set, test_x)
     print len(filter_test_x)
 
-    # NN prediction
-    # pred_hot = model.predict(filter_test_x, batch_size=32)
-    # print pred_hot
-    # pred = [x.tolist().index(1) for x in pred_hot]
-    # print pred
-
-    # SVM prediction
+    # Classifier prediction
     pred = clf.predict(filter_test_x)
     print pred
     print 'Fraction of 1s: ', sum([1 if x == 1 else 0 for x in pred]) / float(len(pred))
@@ -93,7 +43,7 @@ def kaggle_classify():
 
 def run_cross_validation(c_val, g, master_train_x, master_train_y):
     # Store training and validation error for each N
-    kf = KFold(n_splits=10)
+    kf = KFold(n_splits=5)
     total_train_err = 0
     total_valid_err = 0
     for train_index, test_index in kf.split(master_train_x):
