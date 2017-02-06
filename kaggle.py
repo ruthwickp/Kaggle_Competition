@@ -19,8 +19,16 @@ def kaggle_classify():
     print 'Finished filtering...'
 
     # Hot classifier that gives good results
-    clf = GradientBoostingClassifier(n_estimators=500, learning_rate=1, 
-        max_depth=2, random_state=0).fit(filter_train_x[::2], filter_train_y[::2])
+    # clf = GradientBoostingClassifier(n_estimators=300, learning_rate=.5, 
+    #     max_depth=3, random_state=0).fit(filter_train_x, filter_train_y)
+
+    n_estimators = 300
+    learning_rate = 1
+    max_depth = 3
+    random_state = 0
+    run_cross_validation(n_estimators, learning_rate, max_depth, random_state,
+        filter_train_x, filter_train_y)
+
 
     print 'Finished classfying...'
 
@@ -41,7 +49,7 @@ def kaggle_classify():
 
 
 
-def run_cross_validation(c_val, g, master_train_x, master_train_y):
+def run_cross_validation(n_estimators, learning_rate, max_depth, random_state, master_train_x, master_train_y):
     # Store training and validation error for each N
     kf = KFold(n_splits=5)
     total_train_err = 0
@@ -53,7 +61,13 @@ def run_cross_validation(c_val, g, master_train_x, master_train_y):
         x_train, x_test = master_train_x[train_index], master_train_x[test_index]
         y_train, y_test = master_train_y[train_index], master_train_y[test_index]
 
-        clf = svm.SVC(C=c_val, gamma=g)
+        # clf = svm.SVC(C=c_val, gamma=g)
+
+        # Hot classifier that gives good results
+        clf = GradientBoostingClassifier(n_estimators=n_estimators, 
+            learning_rate=learning_rate, max_depth=max_depth, 
+            random_state=random_state)
+
         clf.fit(x_train, y_train)
 
         err_train = compute_error_clf(clf, x_train, y_train)
