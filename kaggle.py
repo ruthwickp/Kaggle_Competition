@@ -3,8 +3,15 @@ import numpy as np
 from sklearn import svm
 from sklearn.model_selection import KFold
 import pickle
+from collections import Counter
 
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import VotingClassifier
+
+
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import GradientBoostingClassifier, ExtraTreesClassifier, AdaBoostClassifier, RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
 
 
 def kaggle_classify():
@@ -18,40 +25,108 @@ def kaggle_classify():
     filter_train_y = train_y
     print 'Finished filtering...'
 
-    # Hot classifier that gives good results
-    # clf = GradientBoostingClassifier(n_estimators=300, learning_rate=.5, 
-    #     max_depth=3, random_state=0).fit(filter_train_x, filter_train_y)
 
-    n_estimators = 300
-    learning_rate = 1
-    max_depth = 3
+    n_estimators = 100
+    learning_rate = .1
+    max_depth = None
     random_state = 0
-    run_cross_validation(n_estimators, learning_rate, max_depth, random_state,
-        filter_train_x, filter_train_y)
 
+    # Run cross validation for our list of classifiers
+    run_cross_validation(filter_train_x, filter_train_y)
+
+
+    # List of classifiers to combine.
+    # If you want to add a classifierl make sure to also add it to 
+    # the run_cross_validation method
+    print 'Processing first classifier'
+    clf_1 = AdaBoostClassifier(base_estimator=DecisionTreeClassifier(max_depth=3), n_estimators=400, learning_rate=.5, 
+        random_state=0).fit(filter_train_x, filter_train_y)
+
+    print 'Processing second classifier'
+    # clf_2 = KNeighborsClassifier(n_neighbors=5).fit(filter_train_x, filter_train_y)
+    clf_2 = RandomForestClassifier(n_estimators=50).fit(filter_train_x, filter_train_y)
+    # clf_2 = ExtraTreesClassifier(n_estimators=100, max_depth=None, 
+    #     random_state=0).fit(filter_train_x, filter_train_y)
+
+    print 'Processing third classifier'
+    clf_3 = GradientBoostingClassifier(n_estimators=400, learning_rate=1, 
+        max_depth=1, random_state=0).fit(filter_train_x, filter_train_y)
+
+    # ADD NEW CLASSIFIERS HERE
+
+
+
+
+    # Combination of all those classifiers
+    print 'Processing total classifier'
+    # ADD NEW CLASSIFIERS HERE
+    total_clf = VotingClassifier(estimators=[('clf_1', clf_1), ('clf_2', clf_2), ('clf_3', clf_3)], 
+        voting='hard').fit(filter_train_x, filter_train_y)
 
     print 'Finished classfying...'
 
+
     # Total Training Error
-    print 'Total Training accuracy: ', clf.score(filter_train_x, filter_train_y)
+    print 'Total Training accuracy: ', gen_clf_accuracy(clf_1, clf_2, clf_3, filter_train_x, filter_train_y)
+    print 'Total Training accuracy: ', total_clf.score(filter_train_x, filter_train_y)
 
 
-
+    # Processing and filtering test data
     test_x = process_test_data('test_2008.csv')
     filter_test_x = extract_feature(feature_set, test_x)
     print len(filter_test_x)
 
-    # Classifier prediction
-    pred = clf.predict(filter_test_x)
+    # Predicting test data
+    # pred = gen_mult_clf_prediction(clf_1, clf_2, clf_3, filter_test_x)
+    pred = total_clf.predict(filter_test_x)
     print pred
     print 'Fraction of 1s: ', sum([1 if x == 1 else 0 for x in pred]) / float(len(pred))
     gen_file(pred)
 
 
 
-def run_cross_validation(n_estimators, learning_rate, max_depth, random_state, master_train_x, master_train_y):
+def gen_clf_accuracy(clf_1, clf_2, clf_3, train_x, train_y):
+    '''
+    Returns accuracy using majority rule
+    '''
+    assert len(train_x) == len(train_y)
+
+    # Total Training Error
+    train_pred_1 = clf_1.predict(train_x)
+    train_pred_2 = clf_2.predict(train_x)
+    train_pred_3 = clf_3.predict(train_x)
+
+    correct = 0
+    majority_rule = 0
+    for i, x in enumerate(train_y):
+        c = Counter([train_pred_1[i], train_pred_2[i], train_pred_3[i]])
+        val, count = c.most_common()[0]
+        if count != 3:
+            majority_rule += 1
+        if val == x:
+            correct += 1
+
+    print 'Prediction difference: ', float(majority_rule) / len(train_y)
+    return float(correct) / len(train_y)
+
+
+# def gen_mult_clf_prediction(clf_1, clf_2, clf_3, train_x):
+#     # Total Training Error
+#     train_pred_1 = clf_1.predict(train_x)
+#     train_pred_2 = clf_2.predict(train_x)
+#     train_pred_3 = clf_3.predict(train_x)
+
+#     pred = []
+#     for i, x in enumerate(train_x):
+#         c = Counter([train_pred_1[i], train_pred_2[i], train_pred_3[i]])
+#         val = c.most_common()[0][0]
+#         pred.append(val)
+#     return np.asarray(pred)
+
+
+def run_cross_validation(master_train_x, master_train_y):
     # Store training and validation error for each N
-    kf = KFold(n_splits=5)
+    kf = KFold(n_splits=6)
     total_train_err = 0
     total_valid_err = 0
     for train_index, test_index in kf.split(master_train_x):
@@ -61,23 +136,64 @@ def run_cross_validation(n_estimators, learning_rate, max_depth, random_state, m
         x_train, x_test = master_train_x[train_index], master_train_x[test_index]
         y_train, y_test = master_train_y[train_index], master_train_y[test_index]
 
-        # clf = svm.SVC(C=c_val, gamma=g)
+
+        # List of classifiers
+        # Should be exactly the same as the ones in kaggle_classify
 
         # Hot classifier that gives good results
-        clf = GradientBoostingClassifier(n_estimators=n_estimators, 
-            learning_rate=learning_rate, max_depth=max_depth, 
-            random_state=random_state)
+        print 'Processing first classifier'
+        clf_1 = AdaBoostClassifier(base_estimator=DecisionTreeClassifier(max_depth=3), n_estimators=400, learning_rate=.5, 
+            random_state=0).fit(x_train, y_train)
 
-        clf.fit(x_train, y_train)
+        print 'Processing second classifier'
+        # clf_2 = KNeighborsClassifier(n_neighbors=3).fit(x_train, y_train)
+        clf_2 = RandomForestClassifier(n_estimators=50).fit(x_train, y_train)
+        # clf_2 = ExtraTreesClassifier(n_estimators=100, max_depth=None, 
+        #     random_state=0).fit(x_train, y_train)
 
-        err_train = compute_error_clf(clf, x_train, y_train)
+
+        print 'Processing third classifier'
+        clf_3 = GradientBoostingClassifier(n_estimators=400, learning_rate=1, 
+            max_depth=1, random_state=0).fit(x_train, y_train)
+
+
+        # ADD NEW CLASSIFIERS HERE
+
+
+        print 'Processing total classifier'
+        # ADD NEW CLASSIFIERS HERE
+        total_clf = VotingClassifier(estimators=[('clf_1', clf_1), ('clf_2', clf_2), ('clf_3', clf_3)], 
+            voting='hard').fit(x_train, y_train)
+
+
+
+        # Prints out the error rate for each classifier,
+        # ADD NEW CLASSIFIERS HERE
+        for index, clf in enumerate([clf_1, clf_2, clf_3]):
+            print 'Output of classifier: ', index
+            # clf_err_train = compute_error_clf(clf, x_train, y_train)
+            clf_err_train = 1 - clf.score(x_train, y_train)
+            print 'Training error per fold: ', clf_err_train
+
+            # Add testing error
+            # clf_err_test = compute_error_clf(clf, x_test, y_test)
+            clf_err_test = 1 - clf.score(x_test, y_test)
+            print 'Valid error per fold: ', clf_err_test
+            
+
+
+        # Computes the training and validation error of total classifier
+        err_train = 1 - total_clf.score(x_train, y_train)
         total_train_err += err_train
-        print 'Training error per fold: ', err_train
+        print 'Final Training error per fold: ', err_train
 
         # Add testing error
-        err_test = compute_error_clf(clf, x_test, y_test)
+        err_test = 1 - total_clf.score(x_test, y_test)
         total_valid_err += err_test
-        print 'Valid error per fold: ', err_test
+        print 'Final Valid error per fold: ', err_test
+
+
+
 
     # Store averages of 5 folds
     avg_train_err = total_train_err / float(kf.get_n_splits(master_train_x))
