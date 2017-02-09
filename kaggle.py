@@ -8,6 +8,10 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import GradientBoostingClassifier, ExtraTreesClassifier, AdaBoostClassifier, RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.svm import SVC
+from sklearn.gaussian_process import GaussianProcessClassifier
+
 
 
 def kaggle_classify():
@@ -40,8 +44,8 @@ def kaggle_classify():
     #     random_state=0)
 
     print 'Processing third classifier'
-    clf_3 = GradientBoostingClassifier(n_estimators=400, learning_rate=1, 
-        max_depth=1, random_state=0)
+    clf_3 = DecisionTreeClassifier(max_depth=10, min_samples_leaf=10,
+            max_features=0.5, max_leaf_nodes=150, min_samples_split=5, random_state=2)
 
     # ADD NEW CLASSIFIERS HERE
     print 'Processing fourth classifier'
@@ -51,14 +55,21 @@ def kaggle_classify():
 
 
     print 'Processing fifth classifier'
-    clf_5 = KNeighborsClassifier(n_neighbors=5)
+    clf_5 = CalibratedClassifierCV(base_estimator=GradientBoostingClassifier(loss='exponential', 
+        n_estimators=400, learning_rate=0.3, 
+        max_depth=1, random_state=2, max_features=0.5, warm_start=True,
+        min_samples_leaf=5, max_leaf_nodes=200), method='sigmoid', cv=3)
 
 
 
     # Combination of all those classifiers
     print 'Processing total classifier'
     # ADD NEW CLASSIFIERS HERE
-    total_clf = VotingClassifier(estimators=[('clf_1', clf_1), ('clf_2', clf_2), ('clf_3', clf_3), ('clf_4', clf_4), ('clf_5', clf_5)], 
+    total_clf = VotingClassifier(
+        estimators=[
+        ('clf_1', clf_1), ('clf_2', clf_2), ('clf_3', clf_3), ('clf_4', clf_4), ('clf_5', clf_5)
+        # ('clf_3', clf_3)
+        ], 
         voting='hard').fit(filter_train_x, filter_train_y)
 
     print 'Finished classfying...'
@@ -69,7 +80,7 @@ def kaggle_classify():
 
 
     # Processing and filtering test data
-    test_x = process_test_data('test_2008.csv')
+    test_x = process_test_data('test_2012.csv')
     filter_test_x = extract_feature(feature_set, test_x)
     print len(filter_test_x)
 
@@ -99,48 +110,57 @@ def run_cross_validation(master_train_x, master_train_y):
         # Hot classifier that gives good results
         print 'Processing first classifier'
         clf_1 = AdaBoostClassifier(base_estimator=DecisionTreeClassifier(max_depth=3), n_estimators=400, learning_rate=.5, 
-            random_state=0).fit(x_train, y_train)
+            random_state=0)
 
         print 'Processing second classifier'
-        # clf_2 = KNeighborsClassifier(n_neighbors=3).fit(x_train, y_train)
-        clf_2 = RandomForestClassifier(n_estimators=50).fit(x_train, y_train)
+        # clf_2 = KNeighborsClassifier(n_neighbors=3)
+        clf_2 = RandomForestClassifier(n_estimators=50)
         # clf_2 = ExtraTreesClassifier(n_estimators=100, max_depth=None, 
-        #     random_state=0).fit(x_train, y_train)
-
+        #     random_state=0)
 
         print 'Processing third classifier'
-        clf_3 = GradientBoostingClassifier(n_estimators=400, learning_rate=1, 
-            max_depth=1, random_state=0).fit(x_train, y_train)
+        clf_3 = DecisionTreeClassifier(max_depth=10, min_samples_leaf=10,
+            max_features=0.5, max_leaf_nodes=150, min_samples_split=5,
+            random_state=2)
 
 
         # ADD NEW CLASSIFIERS HERE
         print 'Processing fourth classifier'
         clf_4 = GradientBoostingClassifier(n_estimators=400, learning_rate=0.3, 
             max_depth=1, random_state=0, max_features=0.5, warm_start=True,
-            min_samples_leaf=5, max_leaf_nodes=200).fit(x_train, y_train)
+            min_samples_leaf=5, max_leaf_nodes=200)
 
 
         print 'Processing fifth classifier'
-        clf_5 = KNeighborsClassifier(n_neighbors=5).fit(x_train, y_train)
+        clf_5 = CalibratedClassifierCV(base_estimator=GradientBoostingClassifier(loss='exponential', 
+            n_estimators=400, learning_rate=0.3, 
+            max_depth=1, random_state=2, max_features=0.5, warm_start=True,
+            min_samples_leaf=5, max_leaf_nodes=200), method='sigmoid', cv=3)
+
 
 
         print 'Processing total classifier'
         # ADD NEW CLASSIFIERS HERE
-        total_clf = VotingClassifier(estimators=[('clf_1', clf_1), ('clf_2', clf_2), ('clf_3', clf_3), ('clf_4', clf_4), ('clf_5', clf_5)], 
+        total_clf = VotingClassifier(
+            estimators=[
+            ('clf_1', clf_1), ('clf_2', clf_2), ('clf_3', clf_3), ('clf_4', clf_4), ('clf_5', clf_5)
+            # ('clf_3', clf_3)
+            ], 
             voting='hard').fit(x_train, y_train)
 
 
 
         # Prints out the error rate for each classifier,
         # ADD NEW CLASSIFIERS HERE
-        for index, clf in enumerate([clf_1, clf_2, clf_3, clf_4, clf_5]):
-            print 'Output of classifier: ', index
-            clf_err_train = 1 - clf.score(x_train, y_train)
-            print 'Training error per fold: ', clf_err_train
+        # for index, clf in enumerate([clf_3, clf_2, clf_1, clf_4, clf_5
+        #     ]):
+        #     print 'Output of classifier: ', index
+        #     clf_err_train = 1 - clf.score(x_train, y_train)
+        #     print 'Training error per fold: ', clf_err_train
 
-            # Add testing error
-            clf_err_test = 1 - clf.score(x_test, y_test)
-            print 'Valid error per fold: ', clf_err_test
+        #     # Add testing error
+        #     clf_err_test = 1 - clf.score(x_test, y_test)
+        #     print 'Valid error per fold: ', clf_err_test
             
 
 
@@ -221,10 +241,10 @@ def process_train_data(file_name, s=','):
     return np.asarray(x), np.asarray(y)
 
 def gen_file(pred):
-    f = open('kaggle_submission.csv', 'w')
+    f = open('kaggle_submission_2012.csv', 'w')
     header = 'id,PES1'
     f.write(header + '\n')
-    for i in range(16000):
+    for i in range(82820):
         f.write(str(i) + ',' + str(int(pred[i])) + '\n')
     f.close()
 
